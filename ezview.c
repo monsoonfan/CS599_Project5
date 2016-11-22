@@ -12,6 +12,10 @@ Notes:
 
 Issues:
 
+Questions:
+- do we need the whole starter kit in our repo?
+- approach for rendering something out of PPM?
+
 */
 
 #define GLFW_DLL 1
@@ -21,6 +25,7 @@ Issues:
 #include <stdio.h>
 #include <GLES2/gl2.h>
 #include <GLFW/glfw3.h>
+#include "ppmrw.c"
 
 GLFWwindow* window;
 

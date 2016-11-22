@@ -1,0 +1,15 @@
+EGL/*
+GLES2/*
+GLFW/*
+glfw*
+KHR/*
+libEGL*
+libGLES*
+platform/*
+d3dcompiler_47.dll
+
+*.c~
+*~
+*.obj
+*.exe
+demo.c
