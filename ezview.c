@@ -6,28 +6,36 @@ rmr5@nau.edu
 Usage: ezview <input.ppm>
 
 Implementation:
-Take demo.c from Dr. P's starter kit, add my PPM reader, and adapt it to the project needs
+Take demo.c from Dr. P's starter kit, add my PPM reader and comments from when we worked
+on it in class, and adapt it to the project needs
 
 Notes:
 
 Issues:
+- couldn't get ppmrw included as a lib, syntax error "expression evaluates to missing function"
 
 Questions:
 - do we need the whole starter kit in our repo? (no)
 - approach for rendering something out of PPM? (texture map to a pair of triangles)
 #include "ppmrw.h"
+#include <test.h>
 */
 
 // need these on windows
 #define GLFW_DLL 1
 #define GL_GLEXT_PROTOTYPES
 
+/*
+  INCLUDES
+ */
 #include <stdlib.h>
 #include <stdio.h>
 #include <GLES2/gl2.h>
 #include <GLFW/glfw3.h>
-#include <test.h>
 
+/*
+  VARIABLES and TYPEDEFS
+ */
 GLFWwindow* window;
 
 typedef struct {
@@ -42,8 +50,8 @@ typedef struct {
 const Vertex Vertices[] = {
   {{1, -1, 0}, {1, 0, 0, 1}},
   {{1, 1, 0}, {0, 1, 0, 1}},
-  {{-1, 1, 0}, {0, 0, 1, 1}},
-  {{-1, -1, 0}, {0, 0, 0, 1}}
+  {{-1, 1, 0}, {0, 0, 0, 1}},
+  {{-1, -1, 0}, {0, 0, 1, 1}}
 };
 
 // this is basically an unsigned char. OpenGL defines these constructs and then maps them 
@@ -80,6 +88,60 @@ char* fragment_shader_src =
   "    gl_FragColor = DestinationColor;\n"
   "}\n";
 
+//--------------------------------------------------------------------------
+/*
+  FUNCTIONS
+ */
+//--------------------------------------------------------------------------
+// Keyboard input - need to handle:
+// - translate (pan)
+// - rotate
+// - scale
+// - shear
+// - also things like exit
+void keyHandler (GLFWwindow *window, int key, int code, int action, int mods) {
+  switch(action) {
+  // do nothing but notify on a press
+  case GLFW_PRESS:
+    printf("key press detected...",key);
+    break;
+  // Action is taken upon release of key
+  case GLFW_RELEASE:
+
+    switch(key) {
+    case(265): // up arrow = pan up
+      printf("(up arrow): panning up...\n");
+      break;
+    case(262): // right arrow = pan right
+      printf("(right arrow): panning right...\n");
+      break;
+    case(263): // left arrow = pan left
+      printf("(left arrow): panning left...\n");
+      break;
+    case(264): // down arrow = pan down
+      printf("(down arrow): panning down...\n");
+      break;
+    case(82): // r = rotate
+      printf("(r): rotating clockwise...\n");
+      break;
+    case(83): // s = shear
+      printf("(s): shear applied to top of image...\n");
+      break;
+    case(73): // i = scale up
+      printf("(i): scaling up...\n");
+      break;
+    case(79): // o = scale down
+      printf("(o): scaling down...\n");
+      break;
+    case(69): // e = exit application
+      printf("(e): Exiting...\n");
+      glfwTerminate();
+      exit(1);
+      break;
+    }
+    break;
+  }
+}
 
 // Need to write a function that will compile our shader from the strange text above
 GLint simple_shader(GLint shader_type, char* shader_src) {
@@ -108,9 +170,10 @@ GLint simple_shader(GLint shader_type, char* shader_src) {
 
   // good idea to create an error function
   if (compile_success == GL_FALSE) {
-    GLchar message[256]; // or you could define as a pointer, not an array
+    // could also define as a pointer here, not an array
     // by passing in 0 for the length of the string returned, we are telling OGL that 
     // we don't care, could create a variable and capture it if you want
+    GLchar message[256];
     glGetShaderInfoLog(shader_id, sizeof(message), 0, &message[0]);
     printf("glCompileShader Error: %s\n", message);
     exit(1); // bail if not rendering correctly
@@ -176,9 +239,6 @@ int main(void) {
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 
-  // test a function
-  testFunc;
-
   // Now create the actual window
   window = glfwCreateWindow(640,
                             480,
@@ -231,7 +291,8 @@ int main(void) {
   // Now need to create an Event Loop
   // ask for input, display output, back and forth, super popular in any kind of UI, game, etc...
   while (!glfwWindowShouldClose(window)) {
-    // this is where we draw stuff!
+    // handle keyboard events
+    glfwSetKeyCallback(window, keyHandler);
 
     // this has been std since like OGL 1.0
     glClearColor(0, 104.0/255.0, 55.0/255.0, 1.0);
