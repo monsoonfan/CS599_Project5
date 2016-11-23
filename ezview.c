@@ -30,6 +30,12 @@ Questions:
  */
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+#include <math.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+
 #include <GLES2/gl2.h>
 #include <GLFW/glfw3.h>
 
@@ -88,140 +94,47 @@ char* fragment_shader_src =
   "    gl_FragColor = DestinationColor;\n"
   "}\n";
 
+
 //--------------------------------------------------------------------------
 /*
   FUNCTIONS
  */
 //--------------------------------------------------------------------------
-// Keyboard input - need to handle:
-// - translate (pan)
-// - rotate
-// - scale
-// - shear
-// - also things like exit
-void keyHandler (GLFWwindow *window, int key, int code, int action, int mods) {
-  switch(action) {
-  // do nothing but notify on a press
-  case GLFW_PRESS:
-    printf("key press detected...",key);
-    break;
-  // Action is taken upon release of key
-  case GLFW_RELEASE:
+void keyHandler (GLFWwindow *window, int key, int code, int action, int mods);
+GLint simple_shader(GLint shader_type, char* shader_src);
+GLint simple_program();
+static void error_callback(int error, const char* description);
 
-    switch(key) {
-    case(265): // up arrow = pan up
-      printf("(up arrow): panning up...\n");
-      break;
-    case(262): // right arrow = pan right
-      printf("(right arrow): panning right...\n");
-      break;
-    case(263): // left arrow = pan left
-      printf("(left arrow): panning left...\n");
-      break;
-    case(264): // down arrow = pan down
-      printf("(down arrow): panning down...\n");
-      break;
-    case(82): // r = rotate
-      printf("(r): rotating clockwise...\n");
-      break;
-    case(83): // s = shear
-      printf("(s): shear applied to top of image...\n");
-      break;
-    case(73): // i = scale up
-      printf("(i): scaling up...\n");
-      break;
-    case(79): // o = scale down
-      printf("(o): scaling down...\n");
-      break;
-    case(69): // e = exit application
-      printf("(e): Exiting...\n");
-      glfwTerminate();
-      exit(1);
-      break;
-    }
-    break;
+static inline int fileExist(char *filename) {
+  struct stat st;
+  int result = stat(filename, &st);
+  return result == 0;
+}
+
+//--------------------------------------------------------------------------
+/*
+  MAIN
+ */
+//--------------------------------------------------------------------------
+int main(int argc, char *argv[]) {
+
+  // Process the input texture map file
+  if (argc != 2) {
+    fprintf(stderr,"Error: need one and only one input paramater (P3/P6 texture map file)\n");
+    return EXIT_FAILURE;
   }
-}
-
-// Need to write a function that will compile our shader from the strange text above
-GLint simple_shader(GLint shader_type, char* shader_src) {
-
-  GLint compile_success = 0;
-
-  // open GL gives back an integer number, not an address/pointer like malloc
-  GLint shader_id = glCreateShader(shader_type);
-
-  // open GL is a state machine, actions change it
-  // set up the shader source
-  glShaderSource(shader_id, 1, &shader_src, 0);
-
-  // compile the source
-  glCompileShader(shader_id);
-
-  // have to check the error code to see if this compiled correctly or not. You have to be
-  // vigilant about checking these error codes and printing out feedback because OGL will not do it
-  // this is how you share a variable from one scope to another inside C program, address-of operator
-  glGetShaderiv(shader_id, GL_COMPILE_STATUS, &compile_success);
-
-  // some of the best programmers are graphics programmers, because the API is difficult.
-  // The API is that way for stability over time. Vulkan is even more difficult.
-  //
-  // look at documentation on Khronos website for info
-
-  // good idea to create an error function
-  if (compile_success == GL_FALSE) {
-    // could also define as a pointer here, not an array
-    // by passing in 0 for the length of the string returned, we are telling OGL that 
-    // we don't care, could create a variable and capture it if you want
-    GLchar message[256];
-    glGetShaderInfoLog(shader_id, sizeof(message), 0, &message[0]);
-    printf("glCompileShader Error: %s\n", message);
-    exit(1); // bail if not rendering correctly
-  }
-
-  return shader_id;
-}
-
-
-// compile the actual program
-GLint simple_program() {
-  // common OGL idioms
-  GLint link_success = 0;
-  GLint program_id = glCreateProgram();
-  GLint vertex_shader = simple_shader(GL_VERTEX_SHADER, vertex_shader_src);
-  GLint fragment_shader = simple_shader(GL_FRAGMENT_SHADER, fragment_shader_src);
-
-  // attach the shaders to the program
-  glAttachShader(program_id, vertex_shader);
-  glAttachShader(program_id, fragment_shader);
-
-  // now do the explicit linking, remember the diagram of the two types of shaders together,
-  // that's our program
-  glLinkProgram(program_id);
-
-  // now check for proper linking
-  glGetProgramiv(program_id, GL_LINK_STATUS, &link_success);
-
-  if (link_success == GL_FALSE) {
-    GLchar message[256];
-    glGetProgramInfoLog(program_id, sizeof(message), 0, &message[0]);
-    printf("glLinkProgram Error: %s\n", message);
-    exit(1);
-  }
-
-  return program_id;
-}
-
-// need to print out any errors whenever there is one thrown or you'll never figure them out
-// callback design pattern, similar to listener design pattern (C doesn't have first
-// class functions, so no closure)
-static void error_callback(int error, const char* description) {
-  fputs(description, stderr);
-}
-
-
-int main(void) {
-
+  char *infile = argv[1];
+  if (!fileExist(infile)) {
+    fprintf(stderr,"Error: Input file \"%s\" does not exist!\n",infile);
+    return EXIT_FAILURE;
+   }
+  
+  printf("Loading texture map input: %s\n",infile);
+  
+  // Open the input file and traverse it, storing the image to buffer
+  //readPPM(infile,&INPUT_FILE_DATA);
+  
+  // Prepare the OGL environment
   GLint program_id, position_slot, color_slot;
   GLuint vertex_buffer;
   GLuint index_buffer;
@@ -316,7 +229,8 @@ int main(void) {
                           GL_FLOAT,
                           GL_FALSE,
                           sizeof(Vertex),
-                          (GLvoid*) (sizeof(float) * 3));  // this is the offset to get to color from Vertex, not posision
+			  // this is the offset to get to color from Vertex, not posision
+                          (GLvoid*) (sizeof(float) * 3));
 
     // finally we can draw the stuff!
     glDrawElements(GL_TRIANGLES,
@@ -366,3 +280,134 @@ int main(void) {
   // Successful exit was reached
   return EXIT_SUCCESS;
 */
+
+//--------------------------------------------------------------------------
+/*
+  FUNCTION IMPLEMENTATIONS
+ */
+//--------------------------------------------------------------------------
+// Keyboard input - need to handle:
+// - translate (pan)
+// - rotate
+// - scale
+// - shear
+// - also things like exit
+void keyHandler (GLFWwindow *window, int key, int code, int action, int mods) {
+  switch(action) {
+  // do nothing but notify on a press
+  case GLFW_PRESS:
+    printf("key press detected...",key);
+    break;
+  // Action is taken upon release of key
+  case GLFW_RELEASE:
+
+    switch(key) {
+    case(265): // up arrow = pan up
+      printf("(up arrow): panning up...\n");
+      break;
+    case(262): // right arrow = pan right
+      printf("(right arrow): panning right...\n");
+      break;
+    case(263): // left arrow = pan left
+      printf("(left arrow): panning left...\n");
+      break;
+    case(264): // down arrow = pan down
+      printf("(down arrow): panning down...\n");
+      break;
+    case(82): // r = rotate
+      printf("(r): rotating clockwise...\n");
+      break;
+    case(83): // s = shear
+      printf("(s): shear applied to top of image...\n");
+      break;
+    case(73): // i = scale up
+      printf("(i): scaling up...\n");
+      break;
+    case(79): // o = scale down
+      printf("(o): scaling down...\n");
+      break;
+    case(69): // e = exit application
+      printf("(e): Exiting...\n");
+      glfwTerminate();
+      exit(1);
+      break;
+    }
+    break;
+  }
+}
+
+// Need to write a function that will compile our shader from the strange text above
+GLint simple_shader(GLint shader_type, char* shader_src) {
+
+  GLint compile_success = 0;
+
+  // open GL gives back an integer number, not an address/pointer like malloc
+  GLint shader_id = glCreateShader(shader_type);
+
+  // open GL is a state machine, actions change it
+  // set up the shader source
+  glShaderSource(shader_id, 1, &shader_src, 0);
+
+  // compile the source
+  glCompileShader(shader_id);
+
+  // have to check the error code to see if this compiled correctly or not. You have to be
+  // vigilant about checking these error codes and printing out feedback because OGL will not do it
+  // this is how you share a variable from one scope to another inside C program, address-of operator
+  glGetShaderiv(shader_id, GL_COMPILE_STATUS, &compile_success);
+
+  // some of the best programmers are graphics programmers, because the API is difficult.
+  // The API is that way for stability over time. Vulkan is even more difficult.
+  //
+  // look at documentation on Khronos website for info
+
+  // good idea to create an error function
+  if (compile_success == GL_FALSE) {
+    // could also define as a pointer here, not an array
+    // by passing in 0 for the length of the string returned, we are telling OGL that 
+    // we don't care, could create a variable and capture it if you want
+    GLchar message[256];
+    glGetShaderInfoLog(shader_id, sizeof(message), 0, &message[0]);
+    printf("glCompileShader Error: %s\n", message);
+    exit(1); // bail if not rendering correctly
+  }
+
+  return shader_id;
+}
+
+// compile the actual program
+GLint simple_program() {
+  // common OGL idioms
+  GLint link_success = 0;
+  GLint program_id = glCreateProgram();
+  GLint vertex_shader = simple_shader(GL_VERTEX_SHADER, vertex_shader_src);
+  GLint fragment_shader = simple_shader(GL_FRAGMENT_SHADER, fragment_shader_src);
+
+  // attach the shaders to the program
+  glAttachShader(program_id, vertex_shader);
+  glAttachShader(program_id, fragment_shader);
+
+  // now do the explicit linking, remember the diagram of the two types of shaders together,
+  // that's our program
+  glLinkProgram(program_id);
+
+  // now check for proper linking
+  glGetProgramiv(program_id, GL_LINK_STATUS, &link_success);
+
+  if (link_success == GL_FALSE) {
+    GLchar message[256];
+    glGetProgramInfoLog(program_id, sizeof(message), 0, &message[0]);
+    printf("glLinkProgram Error: %s\n", message);
+    exit(1);
+  }
+
+  return program_id;
+}
+
+// need to print out any errors whenever there is one thrown or you'll never figure them out
+// callback design pattern, similar to listener design pattern (C doesn't have first
+// class functions, so no closure)
+static void error_callback(int error, const char* description) {
+  fputs(description, stderr);
+}
+
