@@ -25,6 +25,10 @@ Questions:
 #define GLFW_DLL 1
 #define GL_GLEXT_PROTOTYPES
 
+#define UP 0
+#define DOWN 1
+#define LEFT 2
+#define RIGHT 3
 /*
   INCLUDES
  */
@@ -135,10 +139,13 @@ PPM_file_struct     INPUT_FILE_DATA;
 RGBPixel           *RGB_PIXEL_MAP;
 RGBAPixel          *RGBA_PIXEL_MAP;
 
-
-// functions
+//--------------------------------------------------------------------------
+/*
+  FUNCTIONS
+ */
+//--------------------------------------------------------------------------
+// PPM functions
 int   readPPM         (char *infile,          PPM_file_struct *input);
-void  writePPM        (char *outfile,         PPM_file_struct *input);
 void  message         (char message_code[],   char message[]        );
 int   getNumber       (int max_value,         PPM_file_struct *input);
 char* getWord         (PPM_file_struct *input);
@@ -146,25 +153,19 @@ void  reportPPMStruct (PPM_file_struct *input);
 void  reportPixelMap  (RGBPixel *pm          );
 void  skipWhitespace  (PPM_file_struct *input);
 void  skipLine        (PPM_file_struct *input);
-void  writePPMHeader  (FILE* fh              );
-
 void  help            ();
 int   computeDepth();
 char* computeTuplType();
 void  freeGlobalMemory ();
 void  closeAndExit ();
-
-
-//--------------------------------------------------------------------------
-/*
-  FUNCTIONS
- */
-//--------------------------------------------------------------------------
+// OpenGL functions
 void keyHandler (GLFWwindow *window, int key, int code, int action, int mods);
-GLint simple_shader(GLint shader_type, char* shader_src);
-GLint simple_program();
+GLint simpleShader(GLint shader_type, char* shader_src);
+GLint simpleProgram();
 static void error_callback(int error, const char* description);
-
+// Image processing functions
+void scaleImage(float scale_amount, Vertex *input_vertices);
+// Misc inline functions
 static inline int fileExist(char *filename) {
   struct stat st;
   int result = stat(filename, &st);
@@ -233,7 +234,7 @@ int main(int argc, char *argv[]) {
 
   // WARNING: Do NOT do openGL calls before the window is set up!! OGL expects that canvas
   // and if it's not there, it will cause problems
-  program_id = simple_program();
+  program_id = simpleProgram();
 
   // tell it we want to use the program we just created (which has the shaders)
   // remember that OGL is essentially a state machine, so this will change the state
@@ -342,15 +343,18 @@ void keyHandler (GLFWwindow *window, int key, int code, int action, int mods) {
       break;
     case(82): // r = rotate
       printf("(r): rotating clockwise...\n");
+      reportPPMStruct(&INPUT_FILE_DATA);
       break;
     case(83): // s = shear
       printf("(s): shear applied to top of image...\n");
       break;
     case(73): // i = scale up
       printf("(i): scaling up...\n");
+      scaleImage(2,Vertices);
       break;
     case(79): // o = scale down
       printf("(o): scaling down...\n");
+      scaleImage(0.5,Vertices);
       break;
     case(69): // e = exit application
       printf("(e): Exiting...\n");
@@ -363,7 +367,7 @@ void keyHandler (GLFWwindow *window, int key, int code, int action, int mods) {
 }
 
 // Need to write a function that will compile our shader from the strange text above
-GLint simple_shader(GLint shader_type, char* shader_src) {
+GLint simpleShader(GLint shader_type, char* shader_src) {
 
   GLint compile_success = 0;
 
@@ -402,12 +406,12 @@ GLint simple_shader(GLint shader_type, char* shader_src) {
 }
 
 // compile the actual program
-GLint simple_program() {
+GLint simpleProgram() {
   // common OGL idioms
   GLint link_success = 0;
   GLint program_id = glCreateProgram();
-  GLint vertex_shader = simple_shader(GL_VERTEX_SHADER, vertex_shader_src);
-  GLint fragment_shader = simple_shader(GL_FRAGMENT_SHADER, fragment_shader_src);
+  GLint vertex_shader = simpleShader(GL_VERTEX_SHADER, vertex_shader_src);
+  GLint fragment_shader = simpleShader(GL_FRAGMENT_SHADER, fragment_shader_src);
 
   // attach the shaders to the program
   glAttachShader(program_id, vertex_shader);
@@ -949,4 +953,26 @@ void skipLine (PPM_file_struct *input) {
   }
   CURRENT_CHAR = fgetc(input->fh_in); // advance past the \n as getWord/Number are designed to work this way
   PREV_CHAR = CURRENT_CHAR;
+}
+
+
+//-------------------------------------------------------------------
+// Image processing functions
+//-------------------------------------------------------------------
+void scaleImage(float scale_amount, Vertex *input_vertices) {
+  // vars
+  Vertex new_vertices[28];
+
+  // code body
+  printf("Inside scaleImage at %f\n",scale_amount);
+  /*
+  const Vertex Vertices[] = {
+    {{1, -1, 0}, {1, 0, 0, 1}},
+    {{1, 1, 0}, {0, 1, 0, 1}},
+    {{-1, 1, 0}, {0, 0, 0, 1}},
+    {{-1, -1, 0}, {0, 0, 1, 1}}
+  };
+  */
+  
+  //  glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices), new_vertices, GL_STATIC_DRAW);
 }
