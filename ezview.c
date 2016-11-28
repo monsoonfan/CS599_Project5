@@ -9,16 +9,17 @@ Implementation:
 Take demo.c from Dr. P's starter kit, add my PPM reader and comments from when we worked
 on it in class, and adapt it to the project needs
 
-Notes:
+Notes/answers to questions:
+- do we need the whole starter kit in our repo? (no)
+- approach for rendering something out of PPM? (texture map to a pair of triangles)
 
 Issues:
 - couldn't get ppmrw included as a lib, syntax error "expression evaluates to missing function"
-
-Questions:
-- do we need the whole starter kit in our repo? (no)
-- approach for rendering something out of PPM? (texture map to a pair of triangles)
 #include "ppmrw.h"
 #include <test.h>
+
+Questions:
+- where do the indeces fit in to the picture?
 */
 
 // need these on windows
@@ -29,6 +30,11 @@ Questions:
 #define DOWN 1
 #define LEFT 2
 #define RIGHT 3
+#define cos45 0.525
+#define sin45 0.851
+#define cos90 -0.448
+#define sin90 0.894
+
 /*
   INCLUDES
  */
@@ -57,12 +63,30 @@ typedef struct {
 // where things are defined separately. So, creating classes/objects for everything isn't a great idea
 // because you spend time flattening all of that information into one place for OGL
 // these are the points of a square
-const Vertex Vertices[] = {
+const Vertex Vertices_Orig[] = {
   {{1, -1, 0}, {1, 0, 0, 1}},
   {{1, 1, 0}, {0, 1, 0, 1}},
   {{-1, 1, 0}, {0, 0, 0, 1}},
   {{-1, -1, 0}, {0, 0, 1, 1}}
 };
+
+Vertex Rotation_Matrix_X[16] = {
+  // Assume 45 degree rotations about the X axis
+  1.0,     0,      0,     0,
+  0,     cos45, -sin45, 0,
+  0,     sin45,  cos45, 0,
+  0,     0,      0,     1
+};
+
+float Rotation_Matrix_Y[16] = {
+  // Assume 90 degree rotations about the Y axis
+  cos90, 0,      sin90, 0,
+  0,     1,      0,     0,
+  -sin90,0,      cos90, 0,
+  0,     0,      0,     1
+};
+  
+Vertex *Vertices_Current = Vertices_Orig;
 
 // this is basically an unsigned char. OpenGL defines these constructs and then maps them 
 // for you based on the platform so the idea is that it's platform independent for you
@@ -165,7 +189,10 @@ GLint simpleProgram();
 static void error_callback(int error, const char* description);
 // Image processing functions
 void scaleImage(float scale_amount, Vertex *input_vertices);
-// Misc inline functions
+void invertColors(Vertex *input_vertices);
+void rotateImage(char axis);
+void origImage();
+  // Misc inline functions
 static inline int fileExist(char *filename) {
   struct stat st;
   int result = stat(filename, &st);
@@ -250,12 +277,13 @@ int main(int argc, char *argv[]) {
 
   // create a single buffer for the vertex/index buffers
   glGenBuffers(1, &vertex_buffer);
+  //glfwSwapInterval	(	int 	interval	)	
 
   // Now bind the OGL buffer to the right kind of buffer: GL_ARRAY_BUFFER
   glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
 
   // now send the buffer data to that bound buffer
-  glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices), Vertices, GL_STATIC_DRAW);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices_Orig), Vertices_Orig, GL_STATIC_DRAW);
 
   // Now create the index buffer same as the vertices and bind it to the API
   glGenBuffers(1, &index_buffer);
@@ -331,6 +359,7 @@ void keyHandler (GLFWwindow *window, int key, int code, int action, int mods) {
     switch(key) {
     case(265): // up arrow = pan up
       printf("(up arrow): panning up...\n");
+      invertColors(Vertices_Orig);
       break;
     case(262): // right arrow = pan right
       printf("(right arrow): panning right...\n");
@@ -343,18 +372,20 @@ void keyHandler (GLFWwindow *window, int key, int code, int action, int mods) {
       break;
     case(82): // r = rotate
       printf("(r): rotating clockwise...\n");
+      rotateImage('X');
       reportPPMStruct(&INPUT_FILE_DATA);
       break;
     case(83): // s = shear
+      origImage();
       printf("(s): shear applied to top of image...\n");
       break;
     case(73): // i = scale up
       printf("(i): scaling up...\n");
-      scaleImage(2,Vertices);
+      scaleImage(2.0,Vertices_Orig);
       break;
     case(79): // o = scale down
       printf("(o): scaling down...\n");
-      scaleImage(0.5,Vertices);
+      scaleImage(0.5,Vertices_Orig);
       break;
     case(69): // e = exit application
       printf("(e): Exiting...\n");
@@ -961,18 +992,72 @@ void skipLine (PPM_file_struct *input) {
 //-------------------------------------------------------------------
 void scaleImage(float scale_amount, Vertex *input_vertices) {
   // vars
-  Vertex new_vertices[28];
-
+  //  Vertex *new_vertices = input_vertices;
+  /*
+  Vertex new_vertices[] = {
+    {{1, 1, 0}, {1, 0, 0, 1}},
+    {{-1, 1, 0}, {0, 1, 0, 1}},
+    {{-1, -1, 0}, {0, 0, 0, 1}},
+    {{1, -1, 0}, {0, 0, 1, 1}}
+  };
+  */
+  
   // code body
   printf("Inside scaleImage at %f\n",scale_amount);
-  /*
-  const Vertex Vertices[] = {
+  //  const Vertex Vertices[] = {
+  Vertex new_vertices[] = {
     {{1, -1, 0}, {1, 0, 0, 1}},
     {{1, 1, 0}, {0, 1, 0, 1}},
     {{-1, 1, 0}, {0, 0, 0, 1}},
     {{-1, -1, 0}, {0, 0, 1, 1}}
   };
-  */
-  
-  //  glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices), new_vertices, GL_STATIC_DRAW);
+
+  //  Vertices_Current = Vertices_Orig;
+  Vertices_Current = new_vertices;
+  Vertices_Current[0].color[0] = 0.5;
+  Vertices_Current[1].color[2] = 0.75;
+  glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices_Orig), Vertices_Current, GL_STATIC_DRAW);
+  //glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices_Orig), new_vertices, GL_STATIC_DRAW);
 }
+
+void invertColors(Vertex *input_vertices) {
+  // vars
+  printf("Inverting image colors\n");
+  const Vertex VerticesNot[] = {
+    {{1, -1, 0}, {0, 1, 1, 1}},
+    {{1, 1, 0}, {1, 0, 1, 1}},
+    {{-1, 1, 0}, {1, 1, 1, 1}},
+    {{-1, -1, 0}, {1, 1, 0, 1}}
+  };
+
+  glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices_Orig), VerticesNot, GL_STATIC_DRAW);
+
+}
+
+// Rotate the image by way of vertices
+void rotateImage(char axis) {
+  if (axis == 'X') {
+    message("Info","Rotating 45 degrees about the X axis..\n");
+    //Vertices_Current[0].position[0] = Vertices_Current[0].position[0] * Rotation_Matrix_X[0];
+    Vertex new_vertices[] = {
+      {{1, 0, 0}, {1, 0, 0, 1}},
+      {{0, cos45, -sin45}, {0, 1, 0, 1}},
+      {{0, sin45, cos45}, {0, 0, 0, 1}},
+      {{0,0,0}, {0, 0, 1, 1}}
+    };
+    
+    //  Vertices_Current = Vertices_Orig;
+    Vertices_Current = new_vertices;
+
+    glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices_Orig), Vertices_Current, GL_STATIC_DRAW);
+  } else if (axis == 'Y') {
+    message("Info","Rotating 90 degrees about the Y axis..\n");
+  } else {
+    message("Error","Unrecognized rotation!");
+  }
+}
+
+// Misc function to redraw the image to the original constant vertices
+void origImage() {
+  glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices_Orig), Vertices_Orig, GL_STATIC_DRAW);
+}  

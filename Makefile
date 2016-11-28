@@ -1,6 +1,6 @@
 all:
 	cl /MD /I. *.lib ezview.c
-	ezview.exe
+	run ezview.exe p3test.ppm
 
 clean:
 	rm *.exe *.obj
