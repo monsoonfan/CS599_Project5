@@ -20,6 +20,8 @@ Issues:
 
 Questions:
 - where do the indeces fit in to the picture?
+- can't seem to modify any values in the Vertex array. Once this is solved, need to write
+  the math functions to do the proper matrix multiply, currently not correct.
 */
 
 // need these on windows
@@ -57,20 +59,35 @@ GLFWwindow* window;
 typedef struct {
   float position[3];
   float color[4];
+  float texcoord[2];
 } Vertex;
 
 // in general, OpenGL likes big blobs of memory like this. What it doesn't like is information
 // where things are defined separately. So, creating classes/objects for everything isn't a great idea
 // because you spend time flattening all of that information into one place for OGL
 // these are the points of a square
-const Vertex Vertices_Orig[] = {
+const Vertex Vertices_Orig_noTex[] = {
   {{1, -1, 0}, {1, 0, 0, 1}},
   {{1, 1, 0}, {0, 1, 0, 1}},
   {{-1, 1, 0}, {0, 0, 0, 1}},
   {{-1, -1, 0}, {0, 0, 1, 1}}
 };
 
-Vertex Rotation_Matrix_X[16] = {
+const Vertex Vertices_Orig[] = {
+  {{1, -1, 0}, {1, 0, 0, 1}, {15,0}},
+  {{1, 1, 0}, {0, 1, 0, 1}, {15,25}},
+  {{-1, 1, 0}, {0, 0, 0, 1}, {0,25}},
+  {{-1, -1, 0}, {0, 0, 1, 1}, {0,0}}
+};
+
+float Vertices_Test[28] = {
+  1, -1, 0, 1, 0, 0, 1,
+  1, 1, 0, 0, 1, 0, 1,
+  -1, 1, 0, 0, 0, 0, 1,
+  -1, -1, 0, 0, 0, 1, 1
+};
+
+float Rotation_Matrix_X[16] = {
   // Assume 45 degree rotations about the X axis
   1.0,     0,      0,     0,
   0,     cos45, -sin45, 0,
@@ -86,7 +103,8 @@ float Rotation_Matrix_Y[16] = {
   0,     0,      0,     1
 };
   
-Vertex *Vertices_Current = Vertices_Orig;
+//Vertex *Vertices_Current = Vertices_Orig;
+float *Vertices_Current = Vertices_Test;
 
 // this is basically an unsigned char. OpenGL defines these constructs and then maps them 
 // for you based on the platform so the idea is that it's platform independent for you
@@ -106,20 +124,26 @@ const GLubyte Indices[] = {
 char* vertex_shader_src =
   "attribute vec4 Position;\n"
   "attribute vec4 SourceColor;\n"
+  "attribute vec2 TexCoordIn;\n"
+  "varying vec2 TexCoordOut;\n"
   "\n"
   "varying vec4 DestinationColor;\n"
   "\n"
   "void main(void) {\n"
   "    DestinationColor = SourceColor;\n"
+  "    TexCoordOut = TexCoordIn;\n"
   "    gl_Position = Position;\n"
   "}\n";
 
 // fragment shader code here
 char* fragment_shader_src =
   "varying lowp vec4 DestinationColor;\n"
+  "varying lowp vec2 TexCoordOut;\n"
+  "uniform sampler2D Texture;\n"
   "\n"
   "void main(void) {\n"
   "    gl_FragColor = DestinationColor;\n"
+  "    //gl_FragColor = texture2D(Texture, TexCoordOut);\n"
   "}\n";
 
 //--------------------------------------------------------------------------
@@ -149,7 +173,6 @@ typedef struct PPM_file_struct {
   int alpha;
   int depth;
   char *tupltype;
-  //RGBPixel *pixel_map; // didn't get around to nesting pixel_maps into the file_struct
   FILE* fh_in;
 } PPM_file_struct ;
 
@@ -182,17 +205,20 @@ int   computeDepth();
 char* computeTuplType();
 void  freeGlobalMemory ();
 void  closeAndExit ();
+
 // OpenGL functions
 void keyHandler (GLFWwindow *window, int key, int code, int action, int mods);
 GLint simpleShader(GLint shader_type, char* shader_src);
 GLint simpleProgram();
 static void error_callback(int error, const char* description);
+
 // Image processing functions
 void scaleImage(float scale_amount, Vertex *input_vertices);
 void invertColors(Vertex *input_vertices);
 void rotateImage(char axis);
 void origImage();
-  // Misc inline functions
+
+// Misc inline functions
 static inline int fileExist(char *filename) {
   struct stat st;
   int result = stat(filename, &st);
@@ -223,9 +249,10 @@ int main(int argc, char *argv[]) {
   readPPM(infile,&INPUT_FILE_DATA);
   
   // Prepare the OGL environment
-  GLint program_id, position_slot, color_slot;
+  GLint program_id, position_slot, color_slot, tex_coord_slot, texture_uniform;
   GLuint vertex_buffer;
   GLuint index_buffer;
+  GLuint texture_name;
 
   glfwSetErrorCallback(error_callback);
 
@@ -290,6 +317,32 @@ int main(int argc, char *argv[]) {
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, index_buffer);
   glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(Indices), Indices, GL_STATIC_DRAW);
 
+  // Texturing
+  glGenTextures(1,&RGB_PIXEL_MAP);
+  glBindTexture(GL_TEXTURE_2D, RGB_PIXEL_MAP);
+  //glTextureParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexImage2D(GL_TEXTURE_2D,
+	       0,
+	       GL_RGBA,
+	       INPUT_FILE_DATA.width,
+	       INPUT_FILE_DATA.height, 
+	       0,
+	       GL_RGBA,
+	       GL_UNSIGNED_BYTE,
+	       &RGB_PIXEL_MAP
+	       );
+  tex_coord_slot = glGetAttribLocation(program_id, "TexCoordIn");
+  glEnableVertexAttribArray(tex_coord_slot);
+  texture_uniform = glGetUniformLocation(program_id, "Texture");
+  glVertexAttribPointer(tex_coord_slot, 2, GL_FLOAT, GL_FALSE,
+			sizeof(Vertex),
+			sizeof(float)*7
+			);
+  glActiveTexture(GL_TEXTURE);
+  glBindTexture(GL_TEXTURE_2D, texture_name);
+  glUniform1i(texture_uniform, 0);
+  
   // Now need to create an Event Loop
   // ask for input, display output, back and forth, super popular in any kind of UI, game, etc...
   while (!glfwWindowShouldClose(window)) {
@@ -320,7 +373,7 @@ int main(int argc, char *argv[]) {
                           sizeof(Vertex),
 			  // this is the offset to get to color from Vertex, not posision
                           (GLvoid*) (sizeof(float) * 3));
-
+    
     // finally we can draw the stuff!
     glDrawElements(GL_TRIANGLES,
                    sizeof(Indices) / sizeof(GLubyte),
@@ -1014,8 +1067,8 @@ void scaleImage(float scale_amount, Vertex *input_vertices) {
 
   //  Vertices_Current = Vertices_Orig;
   Vertices_Current = new_vertices;
-  Vertices_Current[0].color[0] = 0.5;
-  Vertices_Current[1].color[2] = 0.75;
+  //  Vertices_Current[0].color[0] = 0.5;
+  //  Vertices_Current[1].color[2] = 0.75;
   glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices_Orig), Vertices_Current, GL_STATIC_DRAW);
   //glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices_Orig), new_vertices, GL_STATIC_DRAW);
 }
@@ -1039,17 +1092,28 @@ void rotateImage(char axis) {
   if (axis == 'X') {
     message("Info","Rotating 45 degrees about the X axis..\n");
     //Vertices_Current[0].position[0] = Vertices_Current[0].position[0] * Rotation_Matrix_X[0];
+    /*
     Vertex new_vertices[] = {
       {{1, 0, 0}, {1, 0, 0, 1}},
       {{0, cos45, -sin45}, {0, 1, 0, 1}},
       {{0, sin45, cos45}, {0, 0, 0, 1}},
       {{0,0,0}, {0, 0, 1, 1}}
     };
+    */
     
-    //  Vertices_Current = Vertices_Orig;
-    Vertices_Current = new_vertices;
-
-    glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices_Orig), Vertices_Current, GL_STATIC_DRAW);
+    int checkval = 0;
+    for (int iv = 0; iv < 28; iv++) {
+      float value = Vertices_Test[iv];
+      printf("Found value[%d]: %f\n",iv,value);
+      if (checkval < 3) {
+	Vertices_Test[iv] = value *= Rotation_Matrix_X[iv];
+	//	Vertices_Current[iv].position[ip] = value;
+      }
+      printf("Now it's %f from %f\n",Vertices_Test[iv],value);
+      checkval++;
+      if (checkval == 3) checkval = 0;
+    }
+    glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices_Orig), Vertices_Test, GL_STATIC_DRAW);
   } else if (axis == 'Y') {
     message("Info","Rotating 90 degrees about the Y axis..\n");
   } else {

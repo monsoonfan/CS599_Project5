@@ -60,7 +60,7 @@ typedef struct {
   float position[3];
   float color[4];
   // now we add one more thing, texture coordinates
-  // we do this because need to find out how 
+  // we do this because need to find out how to... ?
   float texcoord[2];
 } Vertex;
 
@@ -68,10 +68,10 @@ Vertex vertexes[] = {
   {{1,-1,0}, {0, 0, 0, 1}, {1, 0}},
   // keep doing this
   // we will have to construct all of these vertices so we can actually display
-}
+};
   
 // texture setup also happens somewhere in the code
-  GLuint myTexture;
+GLuint myTexture;
 glGenTextures(1,&myTexture);
 glBindTexture(GL_TEXTURE_2D, myTexture); // fancy way of saying we want to use the texture
 // set up integer parameter, does some mapping from low res textures to higher res images
