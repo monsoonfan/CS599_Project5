@@ -22,6 +22,7 @@ Questions:
 - where do the indeces fit in to the picture?
 - can't seem to modify any values in the Vertex array. Once this is solved, need to write
   the math functions to do the proper matrix multiply, currently not correct.
+  * supposed to do this in GLSL, pass in the Vertexes, and it will make a copy in GPU mem and mod
 */
 
 // need these on windows
@@ -47,6 +48,8 @@ Questions:
 #include <math.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+//#include "linmath2.h"
+#include "GLFW/linmath.h"
 
 #include <GLES2/gl2.h>
 #include <GLFW/glfw3.h>
@@ -320,7 +323,6 @@ int main(int argc, char *argv[]) {
   // Texturing
   glGenTextures(1,&RGB_PIXEL_MAP);
   glBindTexture(GL_TEXTURE_2D, RGB_PIXEL_MAP);
-  //glTextureParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexImage2D(GL_TEXTURE_2D,
 	       0,
@@ -425,7 +427,8 @@ void keyHandler (GLFWwindow *window, int key, int code, int action, int mods) {
       break;
     case(82): // r = rotate
       printf("(r): rotating clockwise...\n");
-      rotateImage('X');
+      //rotateImage('X');
+      rotateImage('Y');
       reportPPMStruct(&INPUT_FILE_DATA);
       break;
     case(83): // s = shear
@@ -1103,18 +1106,19 @@ void rotateImage(char axis) {
     
     int checkval = 0;
     for (int iv = 0; iv < 28; iv++) {
-      float value = Vertices_Test[iv];
-      printf("Found value[%d]: %f\n",iv,value);
+      //Vertex value = Vertices_Test[iv];
+      //printf("Found value[%d]: %f\n",iv,value);
       if (checkval < 3) {
-	Vertices_Test[iv] = value *= Rotation_Matrix_X[iv];
-	//	Vertices_Current[iv].position[ip] = value;
+	//Vertices_Test[iv] = Rotation_Matrix_X[iv];
+	//Vertices_Current[0].position[0] = value;
       }
-      printf("Now it's %f from %f\n",Vertices_Test[iv],value);
+      //printf("Now it's %f from %f\n",Vertices_Test[iv],value);
       checkval++;
       if (checkval == 3) checkval = 0;
     }
     glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices_Orig), Vertices_Test, GL_STATIC_DRAW);
   } else if (axis == 'Y') {
+    //glTranslate(-1.5f,0.0f,0.0f);
     message("Info","Rotating 90 degrees about the Y axis..\n");
   } else {
     message("Error","Unrecognized rotation!");
@@ -1125,3 +1129,15 @@ void rotateImage(char axis) {
 void origImage() {
   glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices_Orig), Vertices_Orig, GL_STATIC_DRAW);
 }  
+
+/*
+Notes from 12/1/16
+Ditch the color, we don't need it since we are loading color from texture
+ the texdemo.c has gl_Position = MVP * vec4(vPos, 0.0, 1.0);\n // casting to affine, vPos is vec2
+
+he created texture on the fly, Gimp will actually export C code to create the image!!
+
+this helper is just a wrapper around the glCompileShader function
+void glCompileShaderOrDie(GLuint shader) {
+
+ */

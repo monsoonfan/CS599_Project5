@@ -7,3 +7,6 @@ clean:
 
 mine:
 	gcc -I. -L. demo.c -ld3dcompiler_47 -lglfw3 -lglfw3dll.lib -llibEGL -llibGLESv2 -o demo
+
+tut:
+	cl /MD /I. *.lib tutorial.c

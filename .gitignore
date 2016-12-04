@@ -13,3 +13,5 @@ d3dcompiler_47.dll
 *.obj
 *.exe
 demo.c
+
+texdemo.c
