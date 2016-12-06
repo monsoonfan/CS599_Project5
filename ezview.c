@@ -12,6 +12,7 @@ on it in class, and adapt it to the project needs
 Notes/answers to questions:
 - do we need the whole starter kit in our repo? (no)
 - approach for rendering something out of PPM? (texture map to a pair of triangles)
+- he created texture on the fly, Gimp will actually export C code to create the image!!
 
 Issues:
 - couldn't get ppmrw included as a lib, syntax error "expression evaluates to missing function"
@@ -33,16 +34,14 @@ Questions:
 #define DOWN 1
 #define LEFT 2
 #define RIGHT 3
-#define cos45 0.525
-#define sin45 0.851
-#define cos90 -0.448
-#define sin90 0.894
+#define PI 3.1415
 
 /*
   INCLUDES
  */
 #include <stdlib.h>
 #include <stdio.h>
+#include <assert.h>
 #include <string.h>
 #include <ctype.h>
 #include <math.h>
@@ -57,95 +56,55 @@ Questions:
   VARIABLES and TYPEDEFS
  */
 GLFWwindow* window;
+int WIDTH = 640;
+int HEIGHT = 480;
+float ROTATION_AMOUNT = 0;
+float SCALE_AMOUNT = 1;
+float TRANSLATION_X = 0;
+float TRANSLATION_Y = 0;
+float SHEAR_X = 0;
+float SHEAR_Y = 0;
 
 typedef struct {
   float position[3];
-  float color[4];
   float texcoord[2];
 } Vertex;
 
-// in general, OpenGL likes big blobs of memory like this. What it doesn't like is information
-// where things are defined separately. So, creating classes/objects for everything isn't a great idea
-// because you spend time flattening all of that information into one place for OGL
-// these are the points of a square
-const Vertex Vertices_Orig_noTex[] = {
-  {{1, -1, 0}, {1, 0, 0, 1}},
-  {{1, 1, 0}, {0, 1, 0, 1}},
-  {{-1, 1, 0}, {0, 0, 0, 1}},
-  {{-1, -1, 0}, {0, 0, 1, 1}}
-};
-
-const Vertex Vertices_Orig[] = {
-  {{1, -1, 0}, {1, 0, 0, 1}, {15,0}},
-  {{1, 1, 0}, {0, 1, 0, 1}, {15,25}},
-  {{-1, 1, 0}, {0, 0, 0, 1}, {0,25}},
-  {{-1, -1, 0}, {0, 0, 1, 1}, {0,0}}
-};
-
-float Vertices_Test[28] = {
-  1, -1, 0, 1, 0, 0, 1,
-  1, 1, 0, 0, 1, 0, 1,
-  -1, 1, 0, 0, 0, 0, 1,
-  -1, -1, 0, 0, 0, 1, 1
-};
-
-float Rotation_Matrix_X[16] = {
-  // Assume 45 degree rotations about the X axis
-  1.0,     0,      0,     0,
-  0,     cos45, -sin45, 0,
-  0,     sin45,  cos45, 0,
-  0,     0,      0,     1
-};
-
-float Rotation_Matrix_Y[16] = {
-  // Assume 90 degree rotations about the Y axis
-  cos90, 0,      sin90, 0,
-  0,     1,      0,     0,
-  -sin90,0,      cos90, 0,
-  0,     0,      0,     1
-};
-  
-//Vertex *Vertices_Current = Vertices_Orig;
-float *Vertices_Current = Vertices_Test;
-
-// this is basically an unsigned char. OpenGL defines these constructs and then maps them 
-// for you based on the platform so the idea is that it's platform independent for you
+// in general, OpenGL likes big blobs of memory like this. What it doesn't like
+// is information where things are defined separately. So, creating classes/objects
+// for everything isn't a great idea because you spend time flattening all of that
+// information into one place for OGL these are the points of a square
 //
 // Need to order the vertices into some consistent "winding order"
-//
-// the downside to this approach is that we have no warranty that these have the same
-// winding order, that they form as expected.
-// "polygon soup"
-const GLubyte Indices[] = {
-  // these defines two different triangles
-  0, 1, 2,
-  2, 3, 0
+Vertex Vertexes[] = {
+  {{1, -1}, {0.99999, 0.99999}},
+  {{1, 1},  {0.99999, 0}},
+  {{-1, 1}, {0, 0}},
+  {{-1, 1}, {0, 0}},
+  {{-1, -1}, {0, 0.99999}},
+  {{1, -1}, {0.99999, 0.99999}}
 };
 
 // vertex shader code here
 char* vertex_shader_src =
-  "attribute vec4 Position;\n"
-  "attribute vec4 SourceColor;\n"
+  "uniform mat4 MVP;\n"
+  "attribute vec2 Position;\n"
   "attribute vec2 TexCoordIn;\n"
-  "varying vec2 TexCoordOut;\n"
+  "varying lowp vec2 TexCoordOut;\n"
   "\n"
-  "varying vec4 DestinationColor;\n"
   "\n"
   "void main(void) {\n"
-  "    DestinationColor = SourceColor;\n"
   "    TexCoordOut = TexCoordIn;\n"
-  "    gl_Position = Position;\n"
+  "    gl_Position = MVP * vec4(Position, 0.0, 1.0);\n"
   "}\n";
 
 // fragment shader code here
 char* fragment_shader_src =
-  "varying lowp vec4 DestinationColor;\n"
   "varying lowp vec2 TexCoordOut;\n"
   "uniform sampler2D Texture;\n"
   "\n"
   "void main(void) {\n"
-  "    gl_FragColor = DestinationColor;\n"
-  "    //gl_FragColor = texture2D(Texture, TexCoordOut);\n"
+  "    gl_FragColor = texture2D(Texture, TexCoordOut);\n"
   "}\n";
 
 //--------------------------------------------------------------------------
@@ -154,19 +113,6 @@ char* fragment_shader_src =
  */
 //--------------------------------------------------------------------------
 // typdefs
-typedef struct RGBPixel {
-  unsigned char r;
-  unsigned char g;
-  unsigned char b;
-} RGBPixel ;
-
-typedef struct RGBAPixel {
-  unsigned char r;
-  unsigned char g;
-  unsigned char b;
-  unsigned char a;
-} RGBAPixel ;
-
 typedef struct PPM_file_struct {
   char magic_number;
   int lines;
@@ -176,6 +122,7 @@ typedef struct PPM_file_struct {
   int depth;
   char *tupltype;
   FILE* fh_in;
+  unsigned char *buffer;
 } PPM_file_struct ;
 
 // global variables
@@ -185,8 +132,6 @@ int VERBOSE             = 0; // controls logfile message level
 
 // global data structures
 PPM_file_struct     INPUT_FILE_DATA;
-RGBPixel           *RGB_PIXEL_MAP;
-RGBAPixel          *RGBA_PIXEL_MAP;
 
 //--------------------------------------------------------------------------
 /*
@@ -199,7 +144,6 @@ void  message         (char message_code[],   char message[]        );
 int   getNumber       (int max_value,         PPM_file_struct *input);
 char* getWord         (PPM_file_struct *input);
 void  reportPPMStruct (PPM_file_struct *input);
-void  reportPixelMap  (RGBPixel *pm          );
 void  skipWhitespace  (PPM_file_struct *input);
 void  skipLine        (PPM_file_struct *input);
 void  help            ();
@@ -210,15 +154,15 @@ void  closeAndExit ();
 
 // OpenGL functions
 void keyHandler (GLFWwindow *window, int key, int code, int action, int mods);
-GLint simpleShader(GLint shader_type, char* shader_src);
-GLint simpleProgram();
+GLuint simpleShader(GLint shader_type, char* shader_src);
+GLuint simpleProgram();
 static void error_callback(int error, const char* description);
 
 // Image processing functions
-void scaleImage(float scale_amount, Vertex *input_vertices);
-void invertColors(Vertex *input_vertices);
-void rotateImage(char axis);
-void origImage();
+void rotateImage(float rotation_factor);
+void scaleImage(float scale_factor);
+void translateImage(int pan_direction, float pan_factor);
+void shearImage(int shear_direction, float shear_factor);
 
 // Misc inline functions
 static inline int fileExist(char *filename) {
@@ -226,6 +170,64 @@ static inline int fileExist(char *filename) {
   int result = stat(filename, &st);
   return result == 0;
 }
+
+// from example in class on 12/1
+void glCompileShaderOrDie(GLuint shader) {
+  GLint compiled;
+  glCompileShader(shader);
+  glGetShaderiv(shader,
+		GL_COMPILE_STATUS,
+		&compiled);
+  if (!compiled) {
+    GLint infoLen = 0;
+    glGetShaderiv(shader,
+		  GL_INFO_LOG_LENGTH,
+		  &infoLen);
+    char* info = malloc(infoLen+1);
+    GLint done;
+    glGetShaderInfoLog(shader, infoLen, &done, info);
+    printf("gCSOD: Unable to compile shader: %s\n", info);
+    exit(1);
+  }
+}
+
+// 4 x 4 image..
+int image_width = 4;
+int image_height = 4;
+unsigned char image[] = {
+  255, 0, 0, 255,
+  255, 0, 0, 255,
+  255, 0, 0, 255,
+  255, 0, 0, 255,
+
+  0, 255, 0, 255,
+  0, 255, 0, 255,
+  0, 255, 0, 255,
+  0, 255, 0, 255,
+
+  0, 0, 255, 255,
+  0, 0, 255, 255,
+  0, 0, 255, 255,
+  0, 0, 255, 255,
+
+  255, 0, 255, 255,
+  255, 0, 255, 255,
+  255, 0, 255, 255,
+  255, 0, 255, 255
+};
+
+// image from pixmap
+unsigned char *pixmap;
+
+void printMap () {
+  printf(stderr, "DBG: printing pixel map contents\n");
+  int addr = pixmap;
+  for (int i = 0; i < 15*25; i++) {
+    printf("%d\n",addr);
+    addr++;
+  }
+}
+
 
 //--------------------------------------------------------------------------
 /*
@@ -246,15 +248,17 @@ int main(int argc, char *argv[]) {
    }
   
   printf("Loading texture map input: %s\n",infile);
-  
+
+  // TODO remove this
+  printMap();
+    
   // Open the input file and traverse it, storing the image to buffer
   readPPM(infile,&INPUT_FILE_DATA);
   
   // Prepare the OGL environment
-  GLint program_id, position_slot, color_slot, tex_coord_slot, texture_uniform;
-  GLuint vertex_buffer;
-  GLuint index_buffer;
-  GLuint texture_name;
+  GLint program_id, position_slot, color_slot, tex_coord_slot;
+  GLuint vertex_buffer, index_buffer;
+  GLint mvp_location, vpos_location, vcol_location;
 
   glfwSetErrorCallback(error_callback);
 
@@ -270,8 +274,8 @@ int main(int argc, char *argv[]) {
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 
   // Now create the actual window>
-  window = glfwCreateWindow(640,
-                            480,
+  window = glfwCreateWindow(WIDTH,
+                            HEIGHT,
                             "ezview",
                             NULL,
                             NULL);
@@ -287,6 +291,7 @@ int main(int argc, char *argv[]) {
   // Now need to map the GLFW context onto that window
   // this is now the current context and we are going to start working on it
   glfwMakeContextCurrent(window);
+  glfwSwapInterval(1);
 
   // WARNING: Do NOT do openGL calls before the window is set up!! OGL expects that canvas
   // and if it's not there, it will cause problems
@@ -296,90 +301,117 @@ int main(int argc, char *argv[]) {
   // remember that OGL is essentially a state machine, so this will change the state
   glUseProgram(program_id);
 
-  // get the attribute from the program and look for a variable called Position
-  // this is not a memory position like C, this is OGL so it's an index
-  position_slot = glGetAttribLocation(program_id, "Position");
-  color_slot = glGetAttribLocation(program_id, "SourceColor");
-  // next need to use a vertex array to pass information into slots, tell OGL to expect that
-  glEnableVertexAttribArray(position_slot);
-  glEnableVertexAttribArray(color_slot);
-
   // create a single buffer for the vertex/index buffers
   glGenBuffers(1, &vertex_buffer);
-  //glfwSwapInterval	(	int 	interval	)	
 
   // Now bind the OGL buffer to the right kind of buffer: GL_ARRAY_BUFFER
   glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
 
   // now send the buffer data to that bound buffer
-  glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices_Orig), Vertices_Orig, GL_STATIC_DRAW);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(Vertexes), Vertexes, GL_STATIC_DRAW);
 
   // Now create the index buffer same as the vertices and bind it to the API
   glGenBuffers(1, &index_buffer);
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, index_buffer);
-  glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(Indices), Indices, GL_STATIC_DRAW);
-
+  
   // Texturing
-  glGenTextures(1,&RGB_PIXEL_MAP);
-  glBindTexture(GL_TEXTURE_2D, RGB_PIXEL_MAP);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexImage2D(GL_TEXTURE_2D,
-	       0,
-	       GL_RGBA,
-	       INPUT_FILE_DATA.width,
-	       INPUT_FILE_DATA.height, 
-	       0,
-	       GL_RGBA,
-	       GL_UNSIGNED_BYTE,
-	       &RGB_PIXEL_MAP
-	       );
-  tex_coord_slot = glGetAttribLocation(program_id, "TexCoordIn");
-  glEnableVertexAttribArray(tex_coord_slot);
-  texture_uniform = glGetUniformLocation(program_id, "Texture");
-  glVertexAttribPointer(tex_coord_slot, 2, GL_FLOAT, GL_FALSE,
+  mvp_location = glGetUniformLocation(program_id, "MVP");
+  assert(mvp_location != -1);
+  
+  // get the attribute from the program and look for a variable called Position
+  // this is not a memory position like C, this is OGL so it's an index
+  vpos_location = glGetAttribLocation(program_id, "Position");
+  assert(vpos_location != -1);
+  
+  GLint texcoord_location = glGetAttribLocation(program_id, "TexCoordIn");
+  assert(texcoord_location != -1);
+  
+  GLint tex_location = glGetUniformLocation(program_id, "Texture");
+  assert(tex_location != -1);
+  
+  // next need to use a vertex array to pass information into slots, tell OGL to expect that
+  glEnableVertexAttribArray(vpos_location);
+  glVertexAttribPointer(vpos_location,
+			2,
+			GL_FLOAT,
+			GL_FALSE,
 			sizeof(Vertex),
-			sizeof(float)*7
-			);
-  glActiveTexture(GL_TEXTURE);
-  glBindTexture(GL_TEXTURE_2D, texture_name);
-  glUniform1i(texture_uniform, 0);
+			(void*) 0);
+  
+  glEnableVertexAttribArray(texcoord_location);
+  glVertexAttribPointer(texcoord_location,
+			2,
+			GL_FLOAT,
+			GL_FALSE,
+			sizeof(Vertex),
+			(void*) (sizeof(float) * 2));
+  // set up the texture
+  GLuint texID;
+  glGenTextures(1, &texID);
+  glBindTexture(GL_TEXTURE_2D, texID);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+  // apply the texture
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image_width, image_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image);
+  //  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, INPUT_FILE_DATA.width, INPUT_FILE_DATA.height, 0, GL_RGB, GL_UNSIGNED_BYTE, pixmap);
+  //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, INPUT_FILE_DATA.width, INPUT_FILE_DATA.height, 0, GL_RGB, GL_UNSIGNED_BYTE, INPUT_FILE_DATA.buffer);
+  
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, texID);
+  glUniform1i(tex_location, 0);
   
   // Now need to create an Event Loop
   // ask for input, display output, back and forth, super popular in any kind of UI, game, etc...
   while (!glfwWindowShouldClose(window)) {
+    // variables
+    mat4x4 rot_matrix; // store rotation
+    mat4x4 scl_matrix; // store scale
+    mat4x4 trn_matrix; // store translation
+    mat4x4 shr_matrix; // store shear
+    mat4x4 rotXshr_matrix; // product of rotation and shear
+    mat4x4 rotXshrXscl_m;    // product or rotation, shear, and scale
+    mat4x4 mvp;            // all affines applied
+    
     // handle keyboard events
     glfwSetKeyCallback(window, keyHandler);
-
+    
     // this has been std since like OGL 1.0
-    glClearColor(0, 104.0/255.0, 55.0/255.0, 1.0);
+    //    glClearColor(0, 104.0/255.0, 55.0/255.0, 1.0);
     glClear(GL_COLOR_BUFFER_BIT);
 
     // next, set the viewport to match our window. This could be outside the while
     // if it's never changing
-    glViewport(0, 0, 640, 480);
+    glViewport(0, 0, WIDTH, HEIGHT);
 
-    // before we draw, have to tell it what elements to draw
-    glVertexAttribPointer(position_slot,
-                          3,
-                          GL_FLOAT,
-                          GL_FALSE,
-                          sizeof(Vertex),
-                          0);
+    // set up rotation
+    mat4x4_identity(rot_matrix);
+    mat4x4_rotate_Z(rot_matrix, rot_matrix, ROTATION_AMOUNT);
+    
+    // set scale
+    mat4x4_identity(scl_matrix);
+    scl_matrix[0][0] = scl_matrix[0][0]*SCALE_AMOUNT;
+    scl_matrix[1][1] = scl_matrix[1][1]*SCALE_AMOUNT;
 
-    // do same thing to color slot
-    glVertexAttribPointer(color_slot,
-                          4,
-                          GL_FLOAT,
-                          GL_FALSE,
-                          sizeof(Vertex),
-			  // this is the offset to get to color from Vertex, not posision
-                          (GLvoid*) (sizeof(float) * 3));
+    // set up translation
+    mat4x4_identity(trn_matrix);
+    mat4x4_translate(trn_matrix, TRANSLATION_X, TRANSLATION_Y, 0);
+    
+    // set up shear
+    mat4x4_identity(shr_matrix);
+    shr_matrix[0][1] = SHEAR_X;
+    shr_matrix[1][0] = SHEAR_Y;
+	
+    // implement the affine transformations
+    mat4x4_mul(rotXshr_matrix, rot_matrix, shr_matrix);
+    mat4x4_mul(rotXshrXscl_m, rotXshr_matrix, scl_matrix);
+    mat4x4_mul(mvp, rotXshrXscl_m, trn_matrix);
     
     // finally we can draw the stuff!
-    glDrawElements(GL_TRIANGLES,
-                   sizeof(Indices) / sizeof(GLubyte),
-                   GL_UNSIGNED_BYTE, 0);
-
+    glUseProgram(program_id);
+    glUniformMatrix4fv(mvp_location, 1, GL_FALSE, (const GLfloat*) mvp);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    
     glfwSwapBuffers(window);
     glfwPollEvents(); // poll for events that might have happened while we were drawing
   }
@@ -411,38 +443,55 @@ void keyHandler (GLFWwindow *window, int key, int code, int action, int mods) {
   case GLFW_RELEASE:
 
     switch(key) {
-    case(265): // up arrow = pan up
+    case(GLFW_KEY_UP): // up arrow = pan up
       printf("(up arrow): panning up...\n");
-      invertColors(Vertices_Orig);
+      translateImage(UP, 0.25);
       break;
-    case(262): // right arrow = pan right
+    case(GLFW_KEY_RIGHT): // right arrow = pan right
       printf("(right arrow): panning right...\n");
+      translateImage(RIGHT, 0.25);
       break;
-    case(263): // left arrow = pan left
+    case(GLFW_KEY_LEFT): // left arrow = pan left
       printf("(left arrow): panning left...\n");
+      translateImage(LEFT, 0.25);
       break;
-    case(264): // down arrow = pan down
+    case(GLFW_KEY_DOWN): // down arrow = pan down
       printf("(down arrow): panning down...\n");
+      translateImage(DOWN, 0.25);
       break;
-    case(82): // r = rotate
+    case(GLFW_KEY_R): // r = rotate clock
       printf("(r): rotating clockwise...\n");
-      //rotateImage('X');
-      rotateImage('Y');
-      reportPPMStruct(&INPUT_FILE_DATA);
+      rotateImage(-90);
       break;
-    case(83): // s = shear
-      origImage();
-      printf("(s): shear applied to top of image...\n");
+    case(GLFW_KEY_C): // c = rotate counter
+      printf("(c): rotating counter-clockwise...\n");
+      rotateImage(90);
       break;
-    case(73): // i = scale up
+    case(GLFW_KEY_S): // s = shear top to right
+      printf("(s): shear applied at top of image to right...\n");
+      shearImage(RIGHT, 0.15);
+      break;
+    case(GLFW_KEY_D): // s = shear top to left
+      printf("(d): shear applied at top of image to left...\n");
+      shearImage(LEFT, 0.15);
+      break;
+    case(GLFW_KEY_A): // s = shear right upward
+      printf("(a): shear applied at right of image upward...\n");
+      shearImage(UP, 0.15);
+      break;
+    case(GLFW_KEY_F): // s = shear right downward
+      printf("(f): shear applied at right of image downward...\n");
+      shearImage(DOWN, 0.15);
+      break;
+    case(GLFW_KEY_I): // i = scale up (zoom in)
       printf("(i): scaling up...\n");
-      scaleImage(2.0,Vertices_Orig);
+      scaleImage(2.0,Vertexes);
       break;
-    case(79): // o = scale down
+    case(GLFW_KEY_O): // o = scale down (zoom out)
       printf("(o): scaling down...\n");
-      scaleImage(0.5,Vertices_Orig);
+      scaleImage(0.5,Vertexes);
       break;
-    case(69): // e = exit application
+    case(GLFW_KEY_E): // e = exit application
       printf("(e): Exiting...\n");
       glfwTerminate();
       exit(1);
@@ -453,19 +502,19 @@ void keyHandler (GLFWwindow *window, int key, int code, int action, int mods) {
 }
 
 // Need to write a function that will compile our shader from the strange text above
-GLint simpleShader(GLint shader_type, char* shader_src) {
+GLuint simpleShader(GLint shader_type, char* shader_src) {
 
   GLint compile_success = 0;
 
   // open GL gives back an integer number, not an address/pointer like malloc
-  GLint shader_id = glCreateShader(shader_type);
+  GLuint shader_id = glCreateShader(shader_type);
 
   // open GL is a state machine, actions change it
   // set up the shader source
   glShaderSource(shader_id, 1, &shader_src, 0);
 
   // compile the source
-  glCompileShader(shader_id);
+  glCompileShaderOrDie(shader_id);
 
   // have to check the error code to see if this compiled correctly or not. You have to be
   // vigilant about checking these error codes and printing out feedback because OGL will not do it
@@ -492,7 +541,7 @@ GLint simpleShader(GLint shader_type, char* shader_src) {
 }
 
 // compile the actual program
-GLint simpleProgram() {
+GLuint simpleProgram() {
   // common OGL idioms
   GLint link_success = 0;
   GLint program_id = glCreateProgram();
@@ -580,8 +629,7 @@ void help () {
   free up any globally malloc memory
 */
 void freeGlobalMemory () {
-  free(RGB_PIXEL_MAP);
-  free(RGBA_PIXEL_MAP);
+  free(pixmap);
 }
 
 /*
@@ -773,8 +821,7 @@ int readPPM (char *infile, PPM_file_struct *input) {
   // To read the raster/buffer info:
   // need a case statement to deal with 3/6/7 formats separately
   message("Info","Process image information...");
-  RGB_PIXEL_MAP  = malloc(sizeof(RGBPixel)  * input->width * input->height );
-  RGBA_PIXEL_MAP = malloc(sizeof(RGBAPixel) * input->width * input->height );
+  pixmap = malloc(sizeof(unsigned char) * input->width * input->height * 3);
   int number_count = 0;
   int rgb_index = 0;
   int pm_index = 0;
@@ -783,23 +830,21 @@ int readPPM (char *infile, PPM_file_struct *input) {
   // This switch handles parsing the various input file formats for the image data
   switch(input->magic_number) {
   case(3):
-    message("Info","  format version: 3");
+    message("Info","  format version: 3<<");
     while(PREV_CHAR != EOF && number_count < total_pixels) {
       rgb_index = number_count % 3;
       skipWhitespace(input);
-      int value = getNumber(255,input);
+      unsigned char value = getNumber(255,input);
       switch(rgb_index) {
       case(0):
-	RGB_PIXEL_MAP[pm_index].r = value;
-	if(VERBOSE) printf("  stored[%d] %d to RGB_PIXEL_MAP red\n",pm_index,RGB_PIXEL_MAP[pm_index].r);
+	pixmap[pm_index] = value;
+	//INPUT_FILE_DATA->buffer[pm_index] = value;
 	break;
       case(1):
-	RGB_PIXEL_MAP[pm_index].g = value;
-	if(VERBOSE) printf("  stored[%d] %d to RGB_PIXEL_MAP green\n",pm_index,RGB_PIXEL_MAP[pm_index].g);
+	pixmap[pm_index] = value;
 	break;
       case(2):
-	RGB_PIXEL_MAP[pm_index].b = value;
-	if(VERBOSE) printf("  stored[%d] %d to RGB_PIXEL_MAP blue\n",pm_index,RGB_PIXEL_MAP[pm_index].b);
+	pixmap[pm_index] = value;
 	pm_index++;
 	break;
       }
@@ -807,7 +852,6 @@ int readPPM (char *infile, PPM_file_struct *input) {
     }
     printf("read %d numbers\n",number_count);
     message("Info","Done reading PPM 3");
-    //reportPixelMap(RGB_PIXEL_MAP);
     break; // magic number case(3)
   case(6):
     message("Info","  format version: 6");
@@ -820,16 +864,13 @@ int readPPM (char *infile, PPM_file_struct *input) {
       if (!fread(&value,sizeof(unsigned char),1,input->fh_in)) {message("Error","Binary data read error");}
       switch(rgb_index) {
       case(0):
-	RGB_PIXEL_MAP[pm_index].r = value;
-	if(VERBOSE) printf("  stored[%d](%d) %d to RGB_PIXEL_MAP red\n",pm_index,rgb_index,RGB_PIXEL_MAP[pm_index].r);
+	pixmap[pm_index] = value;
 	break;
       case(1):
-	RGB_PIXEL_MAP[pm_index].g = value;
-	if(VERBOSE) printf("  stored[%d](%d) %d to RGB_PIXEL_MAP green\n",pm_index,rgb_index,RGB_PIXEL_MAP[pm_index].g);
+	pixmap[pm_index] = value;
 	break;
       case(2):
-	RGB_PIXEL_MAP[pm_index].b = value;
-	if(VERBOSE) printf("  stored[%d](%d) %d to RGB_PIXEL_MAP blue\n",pm_index,rgb_index,RGB_PIXEL_MAP[pm_index].b);
+	pixmap[pm_index] = value;
 	pm_index++;
 	break;
       }
@@ -837,69 +878,6 @@ int readPPM (char *infile, PPM_file_struct *input) {
     }
     printf("Info: read %d bytes\n",number_count);
     break; // magic number case(6)
-  case(7):
-    message("Info","  format version: 7");
-    unsigned char value;
-    // TODO: fread error checking (don't exceed max val and don't hit EOF)
-    //      if (!fread(&value,sizeof(RGBPixel)/3,1,input->fh_in)) {message("Error","Binary data read error");}
-    if (strcmp(input->tupltype,"RGB") == 0) {
-      message("Info","  reading RGB information only, no alpha channel...");
-      while(number_count < total_pixels) {
-	if (!fread(&value,sizeof(unsigned char),1,input->fh_in)) {message("Error","Binary data read error");}
-	rgb_index = number_count % 3;
-	switch(rgb_index) {
-	case(0):
-	  RGB_PIXEL_MAP[pm_index].r = value;
-	  if(VERBOSE) printf(" stored[%d](%d) %d to pixel_map red\n",pm_index,rgb_index,RGB_PIXEL_MAP[pm_index].r);
-	  break;
-	case(1):
-	  RGB_PIXEL_MAP[pm_index].g = value;
-	  if(VERBOSE) printf(" stored[%d](%d) %d to pixel_map green\n",pm_index,rgb_index,RGB_PIXEL_MAP[pm_index].g);
-	  break;
-	case(2):
-	  RGB_PIXEL_MAP[pm_index].b = value;
-	  if(VERBOSE) printf(" stored[%d](%d) %d to pixel_map blue\n",pm_index,rgb_index,RGB_PIXEL_MAP[pm_index].b);
-	  pm_index++;
-	  break;
-	}
-	number_count++;
-      }
-    } else if (strcmp(input->tupltype,"RGB_ALPHA") == 0) {
-      message("Info","  reading RGB and ALPHA information...");
-      total_pixels = (input->width) * (input->height) * 4;
-      while(number_count < total_pixels) {
-	if (!fread(&value,sizeof(unsigned char),1,input->fh_in)) {message("Error","Binary data read error");}
-	rgb_index = number_count % 4;
-	//	printf("DBG after read: rgb_index: %d number_count: %d\n",rgb_index,number_count);
-	switch(rgb_index) {
-	case(0):
-	  RGB_PIXEL_MAP[pm_index].r = value;
-	  RGBA_PIXEL_MAP[pm_index].r = value;
-	  if(VERBOSE) printf(" stored[%d](%d) %d to pixel_map red\n",pm_index,rgb_index,RGBA_PIXEL_MAP[pm_index].r);
-	  break;
-	case(1):
-	  RGB_PIXEL_MAP[pm_index].g = value;
-	  RGBA_PIXEL_MAP[pm_index].g = value;
-	  if(VERBOSE) printf(" stored[%d](%d) %d to pixel_map green\n",pm_index,rgb_index,RGBA_PIXEL_MAP[pm_index].g);
-	  break;
-	case(2):
-	  RGB_PIXEL_MAP[pm_index].b = value;
-	  RGBA_PIXEL_MAP[pm_index].b = value;
-	  if(VERBOSE) printf(" stored[%d](%d) %d to pixel_map blue\n",pm_index,rgb_index,RGBA_PIXEL_MAP[pm_index].b);
-	  break;
-	case(3):
-	  RGBA_PIXEL_MAP[pm_index].a = value;
-	  if(VERBOSE) printf(" stored[%d](%d) %d to pixel_map alpha\n",pm_index,rgb_index,RGBA_PIXEL_MAP[pm_index].a);
-	  pm_index++;
-	  break;
-	}
-	number_count++;
-      }
-    } else {
-      message("Error","Detected invalid TUPLTYPE");
-    }
-    printf("Info: read %d bytes\n",number_count);
-    break; // magic number case(7)
   }
   
   // ------------------------------- END IMAGE ------------------------------
@@ -947,16 +925,6 @@ void reportPPMStruct (PPM_file_struct *input) {
 }
 
 // small utility function to print the contents of a pixelMap
-void reportPixelMap (RGBPixel *pm) {
-  int index = 0;
-  int fail_safe = 0;
-  while(index < sizeof(pm) && fail_safe < 1000) {
-    printf("rPM: [%d] = [%d,%d,%d]\n",index,pm[index].r,pm[index].g,pm[index].b);
-    index++;
-    fail_safe++;
-  }
-}
-
 // meant to be used with skipWhitespace function that basically skips whitespace
 int getNumber (int max_value, PPM_file_struct *input) {
   int tc_index = 0;
@@ -1045,98 +1013,63 @@ void skipLine (PPM_file_struct *input) {
 //-------------------------------------------------------------------
 // Image processing functions
 //-------------------------------------------------------------------
-void scaleImage(float scale_amount, Vertex *input_vertices) {
-  // vars
-  //  Vertex *new_vertices = input_vertices;
-  /*
-  Vertex new_vertices[] = {
-    {{1, 1, 0}, {1, 0, 0, 1}},
-    {{-1, 1, 0}, {0, 1, 0, 1}},
-    {{-1, -1, 0}, {0, 0, 0, 1}},
-    {{1, -1, 0}, {0, 0, 1, 1}}
-  };
-  */
+void rotateImage(float rotation_factor) {
+  printf("Info: Rotating %f degrees about the X axis..\n", -rotation_factor);
   
-  // code body
-  printf("Inside scaleImage at %f\n",scale_amount);
-  //  const Vertex Vertices[] = {
-  Vertex new_vertices[] = {
-    {{1, -1, 0}, {1, 0, 0, 1}},
-    {{1, 1, 0}, {0, 1, 0, 1}},
-    {{-1, 1, 0}, {0, 0, 0, 1}},
-    {{-1, -1, 0}, {0, 0, 1, 1}}
-  };
-
-  //  Vertices_Current = Vertices_Orig;
-  Vertices_Current = new_vertices;
-  //  Vertices_Current[0].color[0] = 0.5;
-  //  Vertices_Current[1].color[2] = 0.75;
-  glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices_Orig), Vertices_Current, GL_STATIC_DRAW);
-  //glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices_Orig), new_vertices, GL_STATIC_DRAW);
+  ROTATION_AMOUNT += rotation_factor*PI / 180; 
 }
 
-void invertColors(Vertex *input_vertices) {
-  // vars
-  printf("Inverting image colors\n");
-  const Vertex VerticesNot[] = {
-    {{1, -1, 0}, {0, 1, 1, 1}},
-    {{1, 1, 0}, {1, 0, 1, 1}},
-    {{-1, 1, 0}, {1, 1, 1, 1}},
-    {{-1, -1, 0}, {1, 1, 0, 1}}
-  };
-
-  glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices_Orig), VerticesNot, GL_STATIC_DRAW);
-
+void scaleImage(float scale_factor) {
+  printf("Zoom by %f\n",scale_factor);
+  SCALE_AMOUNT *= scale_factor;
 }
 
-// Rotate the image by way of vertices
-void rotateImage(char axis) {
-  if (axis == 'X') {
-    message("Info","Rotating 45 degrees about the X axis..\n");
-    //Vertices_Current[0].position[0] = Vertices_Current[0].position[0] * Rotation_Matrix_X[0];
-    /*
-    Vertex new_vertices[] = {
-      {{1, 0, 0}, {1, 0, 0, 1}},
-      {{0, cos45, -sin45}, {0, 1, 0, 1}},
-      {{0, sin45, cos45}, {0, 0, 0, 1}},
-      {{0,0,0}, {0, 0, 1, 1}}
-    };
-    */
-    
-    int checkval = 0;
-    for (int iv = 0; iv < 28; iv++) {
-      //Vertex value = Vertices_Test[iv];
-      //printf("Found value[%d]: %f\n",iv,value);
-      if (checkval < 3) {
-	//Vertices_Test[iv] = Rotation_Matrix_X[iv];
-	//Vertices_Current[0].position[0] = value;
-      }
-      //printf("Now it's %f from %f\n",Vertices_Test[iv],value);
-      checkval++;
-      if (checkval == 3) checkval = 0;
-    }
-    glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices_Orig), Vertices_Test, GL_STATIC_DRAW);
-  } else if (axis == 'Y') {
-    //glTranslate(-1.5f,0.0f,0.0f);
-    message("Info","Rotating 90 degrees about the Y axis..\n");
-  } else {
-    message("Error","Unrecognized rotation!");
+void translateImage(int pan_direction, float pan_factor) {
+  // decide the direction
+  /*#define UP 0
+    #define DOWN 1
+    #define LEFT 2
+    #define RIGHT 3
+  */
+  switch(pan_direction) {
+  case(0):
+    TRANSLATION_Y += pan_factor;
+    break;
+  case(1):
+    TRANSLATION_Y -= pan_factor;
+    break;
+  case(2):
+    TRANSLATION_X -= pan_factor;
+    break;
+  case(3):
+    TRANSLATION_X += pan_factor;
+    break;
   }
 }
 
-// Misc function to redraw the image to the original constant vertices
-void origImage() {
-  glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices_Orig), Vertices_Orig, GL_STATIC_DRAW);
-}  
+void shearImage(int shear_direction, float shear_factor) {
+  // same directions as translate
+  switch(shear_direction) {
+  case(0):
+    ROTATION_AMOUNT = 0;
+    SHEAR_X -= shear_factor;
+    break;
+  case(1):
+    ROTATION_AMOUNT = 0;
+    SHEAR_X += shear_factor;
+    break;
+  case(2):
+    ROTATION_AMOUNT = 0;
+    SHEAR_Y -= shear_factor;
+    break;
+  case(3):
+    ROTATION_AMOUNT = 0;
+    SHEAR_Y += shear_factor;
+    break;
+  }
+}
 
-/*
-Notes from 12/1/16
-Ditch the color, we don't need it since we are loading color from texture
- the texdemo.c has gl_Position = MVP * vec4(vPos, 0.0, 1.0);\n // casting to affine, vPos is vec2
-
-he created texture on the fly, Gimp will actually export C code to create the image!!
-
-this helper is just a wrapper around the glCompileShader function
-void glCompileShaderOrDie(GLuint shader) {
-
- */
+// Simple tweening function, returns a number between 0 and 1 as time goes by
+// starts at 0, ends at 1
+//float tweenFunction() {
+//}
