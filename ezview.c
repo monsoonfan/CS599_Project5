@@ -48,11 +48,10 @@ Questions:
 #include <math.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-//#include "linmath2.h"
-#include "GLFW/linmath.h"
 
 #include <GLES2/gl2.h>
 #include <GLFW/glfw3.h>
+#include "linmath.h"
 
 /*
   VARIABLES and TYPEDEFS
@@ -270,7 +269,7 @@ int main(int argc, char *argv[]) {
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 
-  // Now create the actual window
+  // Now create the actual window>
   window = glfwCreateWindow(640,
                             480,
                             "ezview",
