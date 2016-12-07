@@ -24,6 +24,8 @@ Issues:
 - Large P3 data is only partially shown (test15 example)
 - couldn't get ppmrw included as a lib, syntax error "expression evaluates to missing function"
 
+- work on code cleanup, smoothing the animation and apply it to scale, proper texturing
+
 Questions:
 */
 

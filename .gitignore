@@ -8,8 +8,9 @@ libGLES*
 platform/*
 d3dcompiler_47.dll
 
-*.c~
 .#*
+#*
+*.c~
 *~
 *.obj
 *.exe
