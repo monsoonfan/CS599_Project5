@@ -9,12 +9,15 @@ platform/*
 d3dcompiler_47.dll
 
 *.c~
+.#*
 *~
 *.obj
 *.exe
 demo.c
-
 texdemo.c
 *checkpoint*
-
 log
+*easing*
+test15_9levels.ppm
+test15_9levels_p3.ppm
+a

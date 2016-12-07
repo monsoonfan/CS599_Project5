@@ -15,15 +15,16 @@ Notes/answers to questions:
 - he created texture on the fly, Gimp will actually export C code to create the image!!
 
 Issues:
+- stuck on tweening function
+  - will work in one direction, but not immediatly back in the other until the absolute
+    value works itself out again. Rotate right twice tween will work, rotate left 3 times
+    the tween will work on the 3rd time
+  - also, shear is causing the rotation animation to happen
+- P3/P6 data is rotated by 90 degrees, actually so is "image"
+- Large P3 data is only partially shown (test15 example)
 - couldn't get ppmrw included as a lib, syntax error "expression evaluates to missing function"
-#include "ppmrw.h"
-#include <test.h>
 
 Questions:
-- where do the indeces fit in to the picture?
-- can't seem to modify any values in the Vertex array. Once this is solved, need to write
-  the math functions to do the proper matrix multiply, currently not correct.
-  * supposed to do this in GLSL, pass in the Vertexes, and it will make a copy in GPU mem and mod
 */
 
 // need these on windows
@@ -56,9 +57,13 @@ Questions:
   VARIABLES and TYPEDEFS
  */
 GLFWwindow* window;
-int WIDTH = 640;
-int HEIGHT = 480;
+//int WIDTH = 640;
+//int HEIGHT = 480;
+int WIDTH = 1000;
+int HEIGHT = 800;
 float ROTATION_AMOUNT = 0;
+float ROTATION_FACTOR;
+float FINAL_ROTATION;
 float SCALE_AMOUNT = 1;
 float TRANSLATION_X = 0;
 float TRANSLATION_Y = 0;
@@ -122,7 +127,6 @@ typedef struct PPM_file_struct {
   int depth;
   char *tupltype;
   FILE* fh_in;
-  unsigned char *buffer;
 } PPM_file_struct ;
 
 // global variables
@@ -163,6 +167,8 @@ void rotateImage(float rotation_factor);
 void scaleImage(float scale_factor);
 void translateImage(int pan_direction, float pan_factor);
 void shearImage(int shear_direction, float shear_factor);
+float tweenFunction(int rate);
+float linearTween (int t, float b, float c, int d);
 
 // Misc inline functions
 static inline int fileExist(char *filename) {
@@ -219,15 +225,6 @@ unsigned char image[] = {
 // image from pixmap
 unsigned char *pixmap;
 
-void printMap () {
-  printf(stderr, "DBG: printing pixel map contents\n");
-  int addr = pixmap;
-  for (int i = 0; i < 15*25; i++) {
-    printf("%d\n",addr);
-    addr++;
-  }
-}
-
 
 //--------------------------------------------------------------------------
 /*
@@ -249,9 +246,6 @@ int main(int argc, char *argv[]) {
   
   printf("Loading texture map input: %s\n",infile);
 
-  // TODO remove this
-  printMap();
-    
   // Open the input file and traverse it, storing the image to buffer
   readPPM(infile,&INPUT_FILE_DATA);
   
@@ -353,9 +347,18 @@ int main(int argc, char *argv[]) {
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
   // apply the texture
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image_width, image_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image);
-  //  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, INPUT_FILE_DATA.width, INPUT_FILE_DATA.height, 0, GL_RGB, GL_UNSIGNED_BYTE, pixmap);
-  //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, INPUT_FILE_DATA.width, INPUT_FILE_DATA.height, 0, GL_RGB, GL_UNSIGNED_BYTE, INPUT_FILE_DATA.buffer);
+  //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image_width, image_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image);
+  glTexImage2D(
+	       GL_TEXTURE_2D,
+	       0,
+	       GL_RGB,
+	       INPUT_FILE_DATA.width,
+	       INPUT_FILE_DATA.height,
+	       0,
+	       GL_RGB,
+	       GL_UNSIGNED_BYTE,
+	       pixmap
+	       );
   
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, texID);
@@ -370,7 +373,7 @@ int main(int argc, char *argv[]) {
     mat4x4 trn_matrix; // store translation
     mat4x4 shr_matrix; // store shear
     mat4x4 rotXshr_matrix; // product of rotation and shear
-    mat4x4 rotXshrXscl_m;    // product or rotation, shear, and scale
+    mat4x4 rotXshrXscl_m;  // product or rotation, shear, and scale
     mat4x4 mvp;            // all affines applied
     
     // handle keyboard events
@@ -384,11 +387,33 @@ int main(int argc, char *argv[]) {
     // if it's never changing
     glViewport(0, 0, WIDTH, HEIGHT);
 
-    // set up rotation
+    // TODO remove
+    float time = (float)glfwGetTime();
+    //printf("time: %f\n",time);
+
+    /*
+      ROTATION
+      --------
+      implment the rotation, the final rotation amount comes from rotateImage(), but
+      the animation/tweening must be applied here in the 'while'
+    */
     mat4x4_identity(rot_matrix);
+    float orig_rotation = ROTATION_AMOUNT;
+    //float final_rotation = orig_rotation + (ROTATION_FACTOR * PI / 180);
+    float increment = 0.001;
+    // Animation
+    //    printf("DBG or_i: %f, RA: %f, RF: %f, fr: %f\n",orig_rotation, ROTATION_AMOUNT, ROTATION_FACTOR, FINAL_ROTATION);
+    while( fabsf(ROTATION_AMOUNT) < fabsf(FINAL_ROTATION) ) {
+      ROTATION_AMOUNT += (increment * ROTATION_FACTOR) * PI / 180;
+      //      printf("DBG or: %f, RA: %f, fr: %f\n",orig_rotation, ROTATION_AMOUNT, FINAL_ROTATION);
+      //mat4x4_rotate_Z(rot_matrix, rot_matrix, ROTATION_AMOUNT);
+      mat4x4_rotate_Z(rot_matrix, rot_matrix, (float)glfwGetTime()*ROTATION_AMOUNT);
+    }
+    // stop at final rotation
+    ROTATION_AMOUNT = FINAL_ROTATION;
     mat4x4_rotate_Z(rot_matrix, rot_matrix, ROTATION_AMOUNT);
     
-    // set scale
+    // set up scale
     mat4x4_identity(scl_matrix);
     scl_matrix[0][0] = scl_matrix[0][0]*SCALE_AMOUNT;
     scl_matrix[1][1] = scl_matrix[1][1]*SCALE_AMOUNT;
@@ -471,27 +496,32 @@ void keyHandler (GLFWwindow *window, int key, int code, int action, int mods) {
       printf("(s): shear applied at top of image to right...\n");
       shearImage(RIGHT, 0.15);
       break;
-    case(GLFW_KEY_D): // s = shear top to left
+    case(GLFW_KEY_D): // d = shear top to left
       printf("(d): shear applied at top of image to left...\n");
       shearImage(LEFT, 0.15);
       break;
-    case(GLFW_KEY_A): // s = shear right upward
+    case(GLFW_KEY_A): // a = shear right upward
       printf("(a): shear applied at right of image upward...\n");
       shearImage(UP, 0.15);
       break;
-    case(GLFW_KEY_F): // s = shear right downward
+    case(GLFW_KEY_F): // f = shear right downward
       printf("(f): shear applied at right of image downward...\n");
       shearImage(DOWN, 0.15);
       break;
     case(GLFW_KEY_I): // i = scale up (zoom in)
       printf("(i): scaling up...\n");
-      scaleImage(2.0,Vertexes);
+      scaleImage(2.0);
       break;
     case(GLFW_KEY_O): // o = scale down (zoom out)
       printf("(o): scaling down...\n");
-      scaleImage(0.5,Vertexes);
+      scaleImage(0.5);
       break;
     case(GLFW_KEY_E): // e = exit application
+      printf("(e): Exiting...\n");
+      glfwTerminate();
+      exit(1);
+      break;
+    case(GLFW_KEY_ESCAPE): // e = exit application
       printf("(e): Exiting...\n");
       glfwTerminate();
       exit(1);
@@ -821,33 +851,25 @@ int readPPM (char *infile, PPM_file_struct *input) {
   // To read the raster/buffer info:
   // need a case statement to deal with 3/6/7 formats separately
   message("Info","Process image information...");
-  pixmap = malloc(sizeof(unsigned char) * input->width * input->height * 3);
-  int number_count = 0;
-  int rgb_index = 0;
-  int pm_index = 0;
   int total_pixels = (input->width) * (input->height) * 3;
+  int number_count = 0;
+  int pm_index = 0;
 
+  // allocate the image buffer memory
+  pixmap = malloc(sizeof(unsigned char *) * total_pixels);
+  
   // This switch handles parsing the various input file formats for the image data
   switch(input->magic_number) {
   case(3):
     message("Info","  format version: 3<<");
-    while(PREV_CHAR != EOF && number_count < total_pixels) {
-      rgb_index = number_count % 3;
+    //    while(PREV_CHAR != EOF && number_count < total_pixels) {
+    while(PREV_CHAR != EOF) {
       skipWhitespace(input);
       unsigned char value = getNumber(255,input);
-      switch(rgb_index) {
-      case(0):
-	pixmap[pm_index] = value;
-	//INPUT_FILE_DATA->buffer[pm_index] = value;
-	break;
-      case(1):
-	pixmap[pm_index] = value;
-	break;
-      case(2):
-	pixmap[pm_index] = value;
-	pm_index++;
-	break;
-      }
+      //INPUT_FILE_DATA->buffer[pm_index] = value;
+      pixmap[pm_index] = value;
+      //      printf("DBG: stored[%d][%d] %d to pixmap\n",pm_index,value,pixmap[pm_index]);
+      pm_index++;
       number_count++;
     }
     printf("read %d numbers\n",number_count);
@@ -855,29 +877,11 @@ int readPPM (char *infile, PPM_file_struct *input) {
     break; // magic number case(3)
   case(6):
     message("Info","  format version: 6");
-    while(number_count < total_pixels) {
-      //      int value[4];
-      unsigned char value;
-      rgb_index = number_count % 3;
-      // TODO: fread error checking (don't exceed max val and don't hit EOF)
-      //      if (!fread(&value,sizeof(RGBPixel)/3,1,input->fh_in)) {message("Error","Binary data read error");}
-      if (!fread(&value,sizeof(unsigned char),1,input->fh_in)) {message("Error","Binary data read error");}
-      switch(rgb_index) {
-      case(0):
-	pixmap[pm_index] = value;
-	break;
-      case(1):
-	pixmap[pm_index] = value;
-	break;
-      case(2):
-	pixmap[pm_index] = value;
-	pm_index++;
-	break;
-      }
-      number_count++;
-    }
+    int err = 0;
+    // read the whole image in one whack
+    number_count = fread(pixmap, 1, total_pixels, input->fh_in);
     printf("Info: read %d bytes\n",number_count);
-    break; // magic number case(6)
+    if (err) {message("Error","Binary data read error");}    
   }
   
   // ------------------------------- END IMAGE ------------------------------
@@ -1013,10 +1017,14 @@ void skipLine (PPM_file_struct *input) {
 //-------------------------------------------------------------------
 // Image processing functions
 //-------------------------------------------------------------------
+// Rotate - this happens by changing two global vars and letting the animation function
+// in the main while loop take care of the animation
 void rotateImage(float rotation_factor) {
   printf("Info: Rotating %f degrees about the X axis..\n", -rotation_factor);
-  
-  ROTATION_AMOUNT += rotation_factor*PI / 180; 
+  float orig_rotation = ROTATION_AMOUNT;
+
+  ROTATION_FACTOR = rotation_factor;
+  FINAL_ROTATION = orig_rotation + (ROTATION_FACTOR * PI / 180);
 }
 
 void scaleImage(float scale_factor) {
@@ -1071,5 +1079,20 @@ void shearImage(int shear_direction, float shear_factor) {
 
 // Simple tweening function, returns a number between 0 and 1 as time goes by
 // starts at 0, ends at 1
-//float tweenFunction() {
-//}
+float tweenFunction(int rate) {
+  float rval = 0.1;
+
+  return rval;
+}
+
+/*
+t = current time
+b = start value
+c = change in value
+d = duration
+t/d can be frames or milliseconds/seconds
+*/
+float linearTween (int t, float b, float c, int d){
+  //printf("DBG t: %d, b: %f, c: %f, d: %d\n",t,b,c,d);
+  return c*t/d + b;
+}
