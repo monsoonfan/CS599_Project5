@@ -20,7 +20,10 @@ Issues:
     value works itself out again. Rotate right twice tween will work, rotate left 3 times
     the tween will work on the 3rd time
   - also, shear is causing the rotation animation to happen
-- P3/P6 data is rotated by 90 degrees, actually so is "image"
+  ANSWER: use Penner's function but have to update t outside the while, think about
+          dividing up into intervals. Get current time, destination is that plus however
+          long you want it to take, and t you have to update based on interval
+
 - Large P3 data is only partially shown (test15 example)
 - couldn't get ppmrw included as a lib, syntax error "expression evaluates to missing function"
 
@@ -84,12 +87,21 @@ typedef struct {
 //
 // Need to order the vertices into some consistent "winding order"
 Vertex Vertexes[] = {
-  {{1, -1}, {0.99999, 0.99999}},
-  {{1, 1},  {0.99999, 0}},
-  {{-1, 1}, {0, 0}},
-  {{-1, 1}, {0, 0}},
-  {{-1, -1}, {0, 0.99999}},
-  {{1, -1}, {0.99999, 0.99999}}
+  /*
+  {{-1, -1}, {0, 0}},
+  {{1, -1}, {0.99999, 0}},
+  {{1, 1},  {0.99999, 0.99999}},
+  {{1, 1},  {0.99999, 0.99999}},
+  {{-1, 1}, {0, 0.99999}},
+  {{-1, -1}, {0, 0}}
+  */
+  // Not sure why the coords have to be rotated CW 90 degrees, but they do
+  {{-1, -1}, {0.99999, 0}},
+  {{1, -1},  {0.99999, 0.99999}},
+  {{1, 1},   {0, 0.99999}},
+  {{1, 1},   {0, 0.99999}},
+  {{-1, 1},  {0, 0}},
+  {{-1, -1}, {0.99999, 0}}
 };
 
 // vertex shader code here
