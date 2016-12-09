@@ -68,7 +68,13 @@ int WIDTH = 1000;
 int HEIGHT = 800;
 float ROTATION_AMOUNT = 0;
 float ROTATION_FACTOR;
+float ROTATION_INCREMENT;
 float FINAL_ROTATION;
+double TWEEN_START_TIME;
+double TWEEN_END_TIME;
+double TWEEN_DURATION = 1.0;
+double TWEEN_CURRENT_TIME;
+double TWEEN_TIME_INCREMENT;
 float SCALE_AMOUNT = 1;
 float TRANSLATION_X = 0;
 float TRANSLATION_Y = 0;
@@ -182,7 +188,7 @@ void scaleImage(float scale_factor);
 void translateImage(int pan_direction, float pan_factor);
 void shearImage(int shear_direction, float shear_factor);
 float tweenFunction(int rate);
-float linearTween (int t, float b, float c, int d);
+float linearTween (double t, double b, double c, double d);
 
 // Misc inline functions
 static inline int fileExist(char *filename) {
@@ -401,10 +407,6 @@ int main(int argc, char *argv[]) {
     // if it's never changing
     glViewport(0, 0, WIDTH, HEIGHT);
 
-    // TODO remove
-    float time = (float)glfwGetTime();
-    //printf("time: %f\n",time);
-
     /*
       ROTATION
       --------
@@ -413,15 +415,29 @@ int main(int argc, char *argv[]) {
     */
     mat4x4_identity(rot_matrix);
     float orig_rotation = ROTATION_AMOUNT;
-    //float final_rotation = orig_rotation + (ROTATION_FACTOR * PI / 180);
-    float increment = 0.001;
+
     // Animation
-    //    printf("DBG or_i: %f, RA: %f, RF: %f, fr: %f\n",orig_rotation, ROTATION_AMOUNT, ROTATION_FACTOR, FINAL_ROTATION);
-    while( fabsf(ROTATION_AMOUNT) < fabsf(FINAL_ROTATION) ) {
-      ROTATION_AMOUNT += (increment * ROTATION_FACTOR) * PI / 180;
-      //      printf("DBG or: %f, RA: %f, fr: %f\n",orig_rotation, ROTATION_AMOUNT, FINAL_ROTATION);
-      //mat4x4_rotate_Z(rot_matrix, rot_matrix, ROTATION_AMOUNT);
-      mat4x4_rotate_Z(rot_matrix, rot_matrix, (float)glfwGetTime()*ROTATION_AMOUNT);
+    /*float linearTween (int t, float b, float c, int d){
+      t = current time
+      b = start value
+      c = change in value
+      d = duration
+      t/d can be frames or milliseconds/seconds
+    */
+    printf("DBG or_i: %f, RA: %f, RF: %f, fr: %f\n",orig_rotation, ROTATION_AMOUNT, ROTATION_FACTOR, FINAL_ROTATION);
+    //    while( fabsf(ROTATION_AMOUNT) < fabsf(FINAL_ROTATION) ) {
+    TWEEN_CURRENT_TIME = glfwGetTime();
+    double next_rotate_time = TWEEN_CURRENT_TIME + TWEEN_TIME_INCREMENT;
+    while( TWEEN_CURRENT_TIME < TWEEN_END_TIME ) {
+      //      if( TWEEN_CURRENT_TIME % TWEEN_TIME_INCREMENT == 0 ) {
+      //      if( fmod(TWEEN_CURRENT_TIME,TWEEN_TIME_INCREMENT) == 0.00000 ) {
+      if( TWEEN_CURRENT_TIME > next_rotate_time ) {
+	printf("DBG or-if: %f\n",next_rotate_time);
+	ROTATION_AMOUNT += ROTATION_INCREMENT;
+	mat4x4_rotate_Z(rot_matrix, rot_matrix, ROTATION_AMOUNT);
+	next_rotate_time = TWEEN_CURRENT_TIME + TWEEN_TIME_INCREMENT;
+      }
+      TWEEN_CURRENT_TIME = glfwGetTime();
     }
     // stop at final rotation
     ROTATION_AMOUNT = FINAL_ROTATION;
@@ -1036,9 +1052,15 @@ void skipLine (PPM_file_struct *input) {
 void rotateImage(float rotation_factor) {
   printf("Info: Rotating %f degrees about the X axis..\n", -rotation_factor);
   float orig_rotation = ROTATION_AMOUNT;
+  double num_steps = 90.0;
 
   ROTATION_FACTOR = rotation_factor;
   FINAL_ROTATION = orig_rotation + (ROTATION_FACTOR * PI / 180);
+  TWEEN_START_TIME = glfwGetTime();
+  TWEEN_END_TIME = TWEEN_START_TIME + TWEEN_DURATION;
+  TWEEN_TIME_INCREMENT = TWEEN_DURATION / num_steps;
+  // want to rotate by this much each time
+  ROTATION_INCREMENT = ROTATION_FACTOR * PI / 180 / (float)num_steps;
 }
 
 void scaleImage(float scale_factor) {
@@ -1106,7 +1128,7 @@ c = change in value
 d = duration
 t/d can be frames or milliseconds/seconds
 */
-float linearTween (int t, float b, float c, int d){
-  //printf("DBG t: %d, b: %f, c: %f, d: %d\n",t,b,c,d);
-  return c*t/d + b;
+float linearTween (double t, double b, double c, double d){
+  printf("DBG t: %lf, b: %lf, c: %lf, d: %lf\n",t,b,c,d);
+  return c*t / d + b;
 }
